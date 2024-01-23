@@ -9,6 +9,5 @@ services:
     environment:
       FLASK_ENV: development
       FLASK_APP: app.py
-      FLASK_RUN_HOST: 0.0.0.0
       SECRET_KEY: 'tajny_klucz'
       SQLALCHEMY_DATABASE_URI: 'sqlite:///site.db'

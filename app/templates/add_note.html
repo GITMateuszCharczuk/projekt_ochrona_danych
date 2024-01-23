@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h2>Add Note</h2>
+  <form method="POST" action="{{ url_for('routes.add_note') }}">
+    {{ form.hidden_tag() }}
+    <div>
+      {{ form.content.label }}
+      {{ form.content(class="form-control") }}
+      {% for error in form.content.errors %}
+        <span style="color: red;">{{ error }}</span>
+      {% endfor %}
+    </div>
+    <div>
+      {{ form.encrypted.label }}
+      {{ form.encrypted() }}
+      {% for error in form.encrypted.errors %}
+        <span style="color: red;">{{ error }}</span>
+      {% endfor %}
+    </div>
+    <div id="password-section" style="display: none;">
+      {{ form.password.label }}
+      {{ form.password(class="form-control") }}
+      {% for error in form.password.errors %}
+        <span style="color: red;">{{ error }}</span>
+      {% endfor %}
+    </div>
+    <div>
+      {{ form.public.label }}
+      {{ form.public() }}
+      {% for error in form.public.errors %}
+        <span style="color: red;">{{ error }}</span>
+      {% endfor %}
+    </div>
+    <div>
+      {{ form.submit(class="btn btn-primary") }}
+    </div>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Add an event listener to show/hide the password section based on the encrypted checkbox
+      var encryptedCheckbox = document.getElementById("encrypted");
+      var passwordSection = document.getElementById("password-section");
+
+      encryptedCheckbox.addEventListener('change', function() {
+        passwordSection.style.display = encryptedCheckbox.checked ? 'block' : 'none';
+      });
+    });
+  </script>
+{% endblock %}

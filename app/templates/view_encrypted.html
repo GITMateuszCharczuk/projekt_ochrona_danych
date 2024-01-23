@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h2>Encrypted Note</h2>
+  <p>This note is encrypted. Please provide the password to view the content.</p>
+
+  <form method="post">
+    {{ form.hidden_tag() }}
+    {{ form.hidden_tag() }}
+    {{ form.password.label }} {{ form.password(size=20) }}
+    {{ form.submit }}
+  </form>
+
+  {% if form.decrypted_content.data %}
+    <div>
+      <h3>Decrypted Content</h3>
+      <p>{{ form.decrypted_content.data }}</p>
+    </div>
+  {% endif %}
+{% endblock %}

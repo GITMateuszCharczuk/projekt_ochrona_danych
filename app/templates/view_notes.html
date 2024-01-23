@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="notes-container">
+    {% if current_user.is_authenticated %}
+    <div class="notes-column">
+      <h2>Your Notes</h2>
+      {% for note in user_notes %}
+        <div class="note-item">
+          {% if note.encrypted %}
+            <div class="encrypted-note">
+              <span style="color: red;">Encrypted Note</span>
+              <a href="{{ url_for('routes.view_encrypted_note', note_id=note.id) }}">View Encrypted Note</a>
+            </div>
+          {% else %}
+            <p class="note-content">{{ note.content | safe }}</p>
+          {% endif %}
+          <p class="timestamp"><small>{{ note.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</small></p>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="notes-column">
+      <h2>Public Notes</h2>
+      {% for note in public_notes %}
+        <div class="note-item">
+          {% if note.encrypted %}
+            <div class="encrypted-note">
+              <h4>{{ note.user.username }}</h4>
+              <span style="color: red;">Encrypted Note</span>
+              <a href="{{ url_for('routes.view_encrypted_note', note_id=note.id) }}">View Encrypted Note</a>
+            </div>
+          {% else %}
+            <h4>{{ note.user.username }}</h4>
+            <p class="note-content">{{ note.content | safe }}</p>
+          {% endif %}
+          <p class="timestamp"><small>Date: {{ note.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</small></p>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endblock %}

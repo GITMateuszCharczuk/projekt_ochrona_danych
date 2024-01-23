@@ -2,11 +2,24 @@ from datetime import datetime
 from flask_login import UserMixin
 from flask_bcrypt import Bcrypt
 from cryptography.fernet import Fernet
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from app import db, app
+import hashlib
+import base64
+
 
 bcrypt = Bcrypt()
-fernet = Fernet(app.config['SECRET_KEY'])
+
+def generate_fernet_key(secret_key):
+    # Ensure the secret_key is in bytes
+    key = secret_key.encode() if isinstance(secret_key, str) else secret_key
+    # Take the SHA256 hash of the key
+    key_hash = hashlib.sha256(key).digest()
+    # Use the first 32 bytes as the Fernet key
+    return base64.urlsafe_b64encode(key_hash[:32])
+
+# Generate the Fernet key from the SECRET_KEY
+fernet_key = generate_fernet_key(app.config['SECRET_KEY'])
+fernet = Fernet(fernet_key)
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -24,17 +37,28 @@ class User(db.Model, UserMixin):
 class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
-    encrypted = db.Column(db.LargeBinary)
+    public = db.Column(db.Boolean, default=False)
+    encrypted = db.Column(db.Boolean, default=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
+    user = db.relationship('User', back_populates='notes')
+    
     def encrypt_content(self, password):
-        self.encrypted_content = fernet.encrypt(bytes(self.content, 'utf-8'))
+        try:
+            key = base64.urlsafe_b64encode(hashlib.sha256(password.encode()).digest())
+            self.encrypted = True
+            self.content=Fernet(key).encrypt(self.content.encode('utf-8'))
+        except Exception as e:
+            print(f"Error encrypting content: {e}")
+
 
     def decrypt_content(self, password):
         try:
-            decrypted_content = fernet.decrypt(self.encrypted_content).decode('utf-8')
+            key = base64.urlsafe_b64encode(hashlib.sha256(password.encode()).digest())
+            decrypted_content = Fernet(key).decrypt(self.content).decode('utf-8')
             return decrypted_content
         except Exception as e:
             print(f"Error decrypting content: {e}")
             return None
+

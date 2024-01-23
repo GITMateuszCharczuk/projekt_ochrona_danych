@@ -4,7 +4,7 @@
 
 {% block content %}
   <h2>Login</h2>
-  <form method="POST" action="{{ url_for('login') }}">
+  <form method="POST" action="{{ url_for('routes.login') }}">
     {{ form.hidden_tag() }}
     <div>
       {{ form.email.label }}
@@ -21,7 +21,6 @@
       {% endfor %}
     </div>
     <div>
-      {{ form.remember.label }}
       {{ form.remember(class="form-check-input") }}
       {{ form.remember.label(class="form-check-label") }}
     </div>
