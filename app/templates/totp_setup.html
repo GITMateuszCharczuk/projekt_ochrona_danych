@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h2>Setup TOTP</h2>
+  <p>Scan the QR code with your authenticator app:</p>
+  <img src="{{ totp_uri|qrcode }}" alt="QR Code" style="width: 200px; height: 200px;">
+  <p>If you can't scan the QR code, you can manually enter the following key:</p>
+  <pre>{{ totp_uri }}</pre>
+  
+  <form method="POST" action="{{ url_for('routes.totp_setup') }}">
+    {{ form.hidden_tag() }}
+    <div>
+        {{ form.totp_code.label }}
+        {{ form.totp_code(class="form-control") }}
+        {% for error in form.totp_code.errors %}
+          <span style="color: red;">{{ error }}</span>
+        {% endfor %}
+      </div>
+      <div>
+        {{ form.submit(class="btn btn-primary") }}
+      </div>
+  </form>
+{% endblock %}

@@ -5,6 +5,7 @@ from cryptography.fernet import Fernet
 from app import db, app
 import hashlib
 import base64
+import pyotp
 
 
 bcrypt = Bcrypt()
@@ -26,6 +27,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
+    totp_secret = db.Column(db.String(16), nullable=False)
     notes = db.relationship('Note', backref='author', lazy=True)
 
     def set_password(self, password):
@@ -33,6 +35,23 @@ class User(db.Model, UserMixin):
 
     def check_password(self, password):
         return bcrypt.check_password_hash(self.password, password)
+    
+    def generate_totp_secret(self):
+        totp = pyotp.TOTP(pyotp.random_base32())
+        self.totp_secret = totp.secret
+
+    def verify_totp(self, totp_code):
+        if not self.totp_secret:
+            return False
+
+        totp = pyotp.TOTP(self.totp_secret)
+        return totp.verify(totp_code)
+    
+    def get_totp_uri(self):
+        totp = pyotp.TOTP(self.totp_secret)
+        issuer_name = 'Note app'  # Replace with your app's name
+        user_name = self.email  # Replace with the user's email or username
+        return totp.provisioning_uri(name=user_name, issuer_name=issuer_name)
 
 class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)

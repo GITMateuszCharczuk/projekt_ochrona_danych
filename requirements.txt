@@ -11,3 +11,6 @@ Flask-WTF
 email_validator
 flask_talisman
 bleach
+pyotp
+qrcode[pil]
+Flask-QRcode

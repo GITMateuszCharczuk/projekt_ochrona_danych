@@ -3,6 +3,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
+from flask_qrcode import QRcode
 # from flask_security import Security
 # from flask_talisman import Talisman
 
@@ -16,8 +17,13 @@ app = Flask(__name__)
 #     }
 # )
 
+
+
+
 app.config['SECRET_KEY'] = '10685202-838e-4733-afcf-72c141d1868f'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['QR_CODE_MODULE'] = 'pil'  # Use the Pillow module for image processing
+app.config['QR_CODE_PIXEL'] = 10  # Set the pixel size for the QR code
 # app.config['SECURITY_PASSWORD_COMPLEXITY_RULES'] = [
 #     dict(type='length', min=8),
 #     dict(type='uppercase', min=1),
@@ -26,7 +32,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 
 # security = Security(app)
 
-
+qrcode = QRcode(app)
 csrf = CSRFProtect(app)
 login_manager = LoginManager()
 login_manager.login_view = 'routes.login'

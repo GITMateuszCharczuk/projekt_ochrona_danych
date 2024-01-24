@@ -1,12 +1,13 @@
-from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify
+from flask import Blueprint,session, render_template, url_for, flash, redirect, request, jsonify
+import sys
 from flask_login import login_user, current_user, logout_user, login_required
 from app import db, login_manager
 from app.models import User, Note
-from app.forms import RegistrationForm, LoginForm, NoteForm, DecryptNoteForm
+from app.forms import RegistrationForm, LoginForm, NoteForm, DecryptNoteForm, VerifyTOTPForm, ChangePassword
 from sqlalchemy.orm import joinedload
 from flask_bcrypt import Bcrypt
 from bleach import clean
-
+import pyotp
 bcrypt = Bcrypt()
 
 routes = Blueprint('routes', __name__)
@@ -96,7 +97,6 @@ def register():
     form = RegistrationForm()
 
     if form.validate_on_submit():
-        # Check if the username already exists
         existing_user = User.query.filter_by(username=form.username.data).first()
 
         if existing_user:
@@ -105,14 +105,36 @@ def register():
 
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
         user = User(username=form.username.data, email=form.email.data, password=hashed_password)
-
+        user.generate_totp_secret()
+        totp_uri = user.get_totp_uri()
         db.session.add(user)
         db.session.commit()
 
-        flash('Your account has been created! You can now log in.', 'success')
-        return redirect(url_for('routes.login'))
+        session['email'] = user.email
+        flash('Your account has been created! Set up Two-Factor Authentication.', 'success')
+
+        return redirect(url_for('routes.totp_setup', totp_uri=totp_uri))
 
     return render_template('register.html', title='Register', form=form)
+
+@routes.route('/totp-setup', methods=['GET', 'POST'])
+def totp_setup():
+    totp_uri = request.args.get('totp_uri', '')
+    email = session.get('email', '')
+    
+    form = VerifyTOTPForm()  # Create an instance of the form
+    
+    if form.validate_on_submit():  # Check if the form is submitted and valid
+        totp_code = form.totp_code.data
+        user = User.query.filter_by(email=email).first()
+        session.pop('email', None)
+        if user.verify_totp(totp_code):
+            flash('TOTP verification successful!', 'success')
+            return redirect(url_for('routes.home'))
+        else:
+            flash('Invalid verification code. Please try again.', 'danger')
+
+    return render_template('totp_setup.html', totp_uri=totp_uri, form=form)
 
 @routes.route('/login', methods=['GET', 'POST'])
 def login():
@@ -121,20 +143,34 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
-        if user and user.check_password(form.password.data):
+        if user and user.check_password(form.password.data) and user.verify_totp(form.totp_code.data):
             login_user(user, remember=form.remember.data)
             return redirect(url_for('routes.home'))
         else:
             flash('Login unsuccessful.', 'danger')
     return render_template('login.html', title='Login', form=form)
 
+@routes.route('/change_password', methods=['GET', 'POST'])
+def change_password():
+    form = ChangePassword()
+
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and user.verify_totp(form.totp_code.data):
+            hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
+            user.password = hashed_password
+            db.session.commit()
+            flash('Password changed successfully', 'success')
+            return redirect(url_for('routes.home'))
+        else:
+            flash('Something went wrong', 'danger')
+    return render_template('change_password.html', form=form)
+
 @routes.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('routes.home'))
-
-
 
 def secure_content_payload(content):
     allowed_tags = ['h1', 'h2', 'h3', 'h4', 'h5', 'strong', 'a', 'img', 'i']
