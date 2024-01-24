@@ -1,13 +1,13 @@
 from flask import Blueprint,session, render_template, url_for, flash, redirect, request, jsonify
 import sys
 from flask_login import login_user, current_user, logout_user, login_required
-from app import db, login_manager
+from app import db
 from app.models import User, Note
 from app.forms import RegistrationForm, LoginForm, NoteForm, DecryptNoteForm, VerifyTOTPForm, ChangePassword
 from sqlalchemy.orm import joinedload
 from flask_bcrypt import Bcrypt
 from bleach import clean
-import pyotp
+
 bcrypt = Bcrypt()
 
 routes = Blueprint('routes', __name__)
@@ -18,17 +18,15 @@ LOCKOUT_DURATION_SECONDS = 3600
 @routes.route('/')
 def home():
     public_notes = (
-            Note.query
-            .filter_by(public=True)
-            .options(joinedload(Note.user))  # This will eagerly load the associated user
-            .all()
+        Note.query
+        .filter_by(public=True)
+        .options(joinedload(Note.user))
+        .all()
     )
     if current_user.is_authenticated:
         user_notes = Note.query.filter_by(user_id=current_user.id, public=False).all()
-        #public_notes = Note.query.filter_by(public=True).all()
         return render_template('home.html', username=current_user.username, user_notes=user_notes, public_notes=public_notes)
     else:
-        public_notes = Note.query.filter_by(public=True).all()
         return render_template('home.html', public_notes=public_notes)
 
 @routes.route('/add_note', methods=['GET', 'POST'])
@@ -68,10 +66,17 @@ def view_notes():
         return render_template('view_notes.html', title='View Notes', user_notes=[], public_notes=public_notes)
 
 @routes.route('/view_encrypted_note/<int:note_id>', methods=['GET', 'POST'])
-@login_required
+
 def view_encrypted_note(note_id):
     note = Note.query.get_or_404(note_id)
-
+    user = User.query.get_or_404(note.user_id)
+    
+    if not note.public:
+        if not current_user.is_anonymous and current_user.id == note.user_id:
+            pass
+        else:
+            flash('Access denied', 'warning')
+            return redirect(url_for('routes.view_notes'))
     if not note.encrypted:
         flash('This note is not encrypted.', 'warning')
         return redirect(url_for('routes.view_notes'))
@@ -97,10 +102,11 @@ def register():
     form = RegistrationForm()
 
     if form.validate_on_submit():
-        existing_user = User.query.filter_by(username=form.username.data).first()
-
-        if existing_user:
-            flash('Username is already taken. Please choose a different one.', 'danger')
+        existing_user_email = User.query.filter_by(email=form.email.data).first()
+        existing_user_username = User.query.filter_by(username=form.username.data).first()
+        
+        if existing_user_email or existing_user_username:
+            flash('Something went wrong', 'danger')
             return redirect(url_for('routes.register'))
 
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')

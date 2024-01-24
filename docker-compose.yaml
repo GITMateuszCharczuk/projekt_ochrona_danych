@@ -11,3 +11,11 @@ services:
       FLASK_APP: app.py
       SECRET_KEY: 'tajny_klucz'
       SQLALCHEMY_DATABASE_URI: 'sqlite:///site.db'
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - web

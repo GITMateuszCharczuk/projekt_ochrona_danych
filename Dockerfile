@@ -13,7 +13,12 @@ COPY entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["bash", "/usr/local/bin/entrypoint.sh"]
 
+# Ustawiamy zmienną środowiskową dla Flask
+ENV FLASK_APP=app.py
 
 EXPOSE 5000
 
-CMD ["python", "app.py"]
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Uruchamiamy aplikację
+CMD ["flask", "run", "--host=0.0.0.0"]
