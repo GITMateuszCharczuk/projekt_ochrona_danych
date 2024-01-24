@@ -1,23 +1,18 @@
 from flask import Blueprint,session, render_template, url_for, flash, redirect, request, jsonify
-import sys
 from flask_login import login_user, current_user, logout_user, login_required
 from app import db
 from app.models import User, Note
 from app.forms import RegistrationForm, LoginForm, NoteForm, DecryptNoteForm, VerifyTOTPForm, ChangePassword
 from sqlalchemy.orm import joinedload
-from flask_bcrypt import Bcrypt
 from bleach import clean
-
-bcrypt = Bcrypt()
+from functools import wraps
+from app.decorators import check_client
 
 routes = Blueprint('routes', __name__)
 
-MAX_FAILED_ATTEMPTS = 10
-LOCKOUT_DURATION_SECONDS = 3600
-
 @routes.route('/')
 def home():
-    public_notes = (
+    public_notes = ( 
         Note.query
         .filter_by(public=True)
         .options(joinedload(Note.user))
@@ -69,7 +64,6 @@ def view_notes():
 
 def view_encrypted_note(note_id):
     note = Note.query.get_or_404(note_id)
-    user = User.query.get_or_404(note.user_id)
     
     if not note.public:
         if not current_user.is_anonymous and current_user.id == note.user_id:
@@ -109,18 +103,24 @@ def register():
             flash('Something went wrong', 'danger')
             return redirect(url_for('routes.register'))
 
-        hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        user = User(username=form.username.data, email=form.email.data, password=hashed_password)
-        user.generate_totp_secret()
-        totp_uri = user.get_totp_uri()
-        db.session.add(user)
-        db.session.commit()
+        user = User(username=form.username.data, email=form.email.data)
+        
+        try:
+            user.set_password(form.password.data)
+            user.generate_totp_secret()
+            totp_uri = user.get_totp_uri()
+            db.session.add(user)
+            db.session.commit()
 
-        session['email'] = user.email
-        flash('Your account has been created! Set up Two-Factor Authentication.', 'success')
-
+            session['email'] = user.email
+            flash('Your account has been created! Set up Two-Factor Authentication.', 'success')
+        except ValueError as e:
+            if form.username.data:
+                flash(str(e), 'danger')
         return redirect(url_for('routes.totp_setup', totp_uri=totp_uri))
-
+    else:
+        if form.errors.items():
+            flash('Something went wrong with account creation', 'danger')
     return render_template('register.html', title='Register', form=form)
 
 @routes.route('/totp-setup', methods=['GET', 'POST'])
@@ -133,16 +133,57 @@ def totp_setup():
     if form.validate_on_submit():  # Check if the form is submitted and valid
         totp_code = form.totp_code.data
         user = User.query.filter_by(email=email).first()
-        session.pop('email', None)
         if user.verify_totp(totp_code):
             flash('TOTP verification successful!', 'success')
+            session.pop('email', None)
             return redirect(url_for('routes.home'))
         else:
             flash('Invalid verification code. Please try again.', 'danger')
 
     return render_template('totp_setup.html', totp_uri=totp_uri, form=form)
 
+# def check_client(func):
+#     @wraps(func)
+#     def wrapper(*args, **kwargs):
+
+#         client_ip = request.remote_addr
+
+#         client = Client.query.filter_by(ip=client_ip).first()
+
+#         if client:
+#             if client.is_suspended and datetime.utcnow() >= client.timeout_date:
+#                 client.is_suspended = False
+#             else:
+#                 flash('Account suspended for too many requests', 'danger')
+#                 return redirect(url_for('routes.home'))
+
+#             time_difference = datetime.utcnow() - client.requests[-1].request_date if client.requests else timedelta(seconds=1)
+#             if time_difference.total_seconds() < 1:
+#                 time.sleep(1)
+
+#             recent_requests = Client.query.filter(
+#                 Client.ip == client_ip,
+#                 Client.requests.any(Request.request_date >= (datetime.utcnow() - timedelta(minutes=10)))
+#             ).count()
+            
+#             if recent_requests >= 100:
+#                 client.is_suspended = True
+#                 client.timeout_date = datetime.utcnow() + timedelta(hours=1)
+#                 db.session.commit()
+#                 flash('Account suspended for too many requests', 'danger')
+#                 return redirect(url_for('routes.home'))
+
+#         if client:
+#             request_entry = Request(client_id=client.id)
+#             db.session.add(request_entry)
+#             db.session.commit()
+
+#         return func(*args, **kwargs)
+
+#     return wrapper
+
 @routes.route('/login', methods=['GET', 'POST'])
+@check_client
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('home'))
@@ -163,10 +204,12 @@ def change_password():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user and user.verify_totp(form.totp_code.data):
-            hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-            user.password = hashed_password
-            db.session.commit()
-            flash('Password changed successfully', 'success')
+            try:
+                user.set_password(form.password.data)
+                db.session.commit()
+                flash('Password changed successfully', 'success')
+            except ValueError as e:
+                flash(str(e), 'danger')
             return redirect(url_for('routes.home'))
         else:
             flash('Something went wrong', 'danger')
@@ -184,3 +227,4 @@ def secure_content_payload(content):
     
     cleaned_content = clean(content, tags=allowed_tags, attributes=allowed_attributes)
     return cleaned_content
+

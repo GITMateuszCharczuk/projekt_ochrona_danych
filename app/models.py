@@ -6,21 +6,11 @@ from app import db, app
 import hashlib
 import base64
 import pyotp
-
+import re
+import math
+from collections import Counter
 
 bcrypt = Bcrypt()
-
-def generate_fernet_key(secret_key):
-    # Ensure the secret_key is in bytes
-    key = secret_key.encode() if isinstance(secret_key, str) else secret_key
-    # Take the SHA256 hash of the key
-    key_hash = hashlib.sha256(key).digest()
-    # Use the first 32 bytes as the Fernet key
-    return base64.urlsafe_b64encode(key_hash[:32])
-
-# Generate the Fernet key from the SECRET_KEY
-fernet_key = generate_fernet_key(app.config['SECRET_KEY'])
-fernet = Fernet(fernet_key)
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -31,6 +21,9 @@ class User(db.Model, UserMixin):
     notes = db.relationship('Note', backref='author', lazy=True)
 
     def set_password(self, password):
+        res = is_password_strong(password)
+        if(res is not None):
+            raise ValueError(res)
         self.password = bcrypt.generate_password_hash(password).decode('utf-8')
 
     def check_password(self, password):
@@ -49,8 +42,8 @@ class User(db.Model, UserMixin):
     
     def get_totp_uri(self):
         totp = pyotp.TOTP(self.totp_secret)
-        issuer_name = 'Note app'  # Replace with your app's name
-        user_name = self.email  # Replace with the user's email or username
+        issuer_name = 'Note app'
+        user_name = self.email
         return totp.provisioning_uri(name=user_name, issuer_name=issuer_name)
 
 class Note(db.Model):
@@ -66,8 +59,8 @@ class Note(db.Model):
     def encrypt_content(self, password):
         try:
             key = base64.urlsafe_b64encode(hashlib.sha256(password.encode()).digest())
-            self.encrypted = True
             self.content=Fernet(key).encrypt(self.content.encode('utf-8'))
+            self.encrypted = True
         except Exception as e:
             print(f"Error encrypting content: {e}")
 
@@ -80,4 +73,45 @@ class Note(db.Model):
         except Exception as e:
             print(f"Error decrypting content: {e}")
             return None
+        
+class Client(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.Text, nullable=False)
+    timeout_date = db.Column(db.DateTime, default=datetime.utcnow)
+    is_suspended = db.Column(db.Boolean, default=False)
+    requests = db.relationship('Request', back_populates='client')
+
+class Request(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    request_date = db.Column(db.DateTime, default=datetime.utcnow)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'))
+    client = db.relationship('Client', back_populates='requests')
+    
+def is_password_strong(password):
+    if len(password) < 8:
+        return "Password too short, it must contain at least 8 digits"
+
+    if not any(char.isupper() for char in password):
+        return "No uppercase characters in password"
+
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return "No special characters in password"
+
+    if not any(char.isdigit() for char in password):
+        return "No digits in password"
+
+    if calculate_entropy(password) < 3:
+        return "Too weak password"
+    
+    return None
+
+
+
+def calculate_entropy(input_string):
+    n = len(input_string)
+    char_frequencies = Counter(input_string)
+    probabilities = [char_count / n for char_count in char_frequencies.values()]
+    entropy = -sum(p * math.log2(p) for p in probabilities if p > 0)
+    
+    return entropy
 

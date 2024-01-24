@@ -13,7 +13,7 @@
   {% if form.decrypted_content.data %}
     <div>
       <h3>Decrypted Content</h3>
-      <p>{{ form.decrypted_content.data }}</p>
+      <p>{{ form.decrypted_content.data | safe }}</p>
     </div>
   {% endif %}
 {% endblock %}
