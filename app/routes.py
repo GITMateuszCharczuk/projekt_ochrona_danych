@@ -5,7 +5,6 @@ from app.models import User, Note
 from app.forms import RegistrationForm, LoginForm, NoteForm, DecryptNoteForm, VerifyTOTPForm, ChangePassword
 from sqlalchemy.orm import joinedload
 from bleach import clean
-from functools import wraps
 from app.decorators import check_client
 
 routes = Blueprint('routes', __name__)
@@ -61,7 +60,7 @@ def view_notes():
         return render_template('view_notes.html', title='View Notes', user_notes=[], public_notes=public_notes)
 
 @routes.route('/view_encrypted_note/<int:note_id>', methods=['GET', 'POST'])
-
+@check_client
 def view_encrypted_note(note_id):
     note = Note.query.get_or_404(note_id)
     
@@ -128,9 +127,9 @@ def totp_setup():
     totp_uri = request.args.get('totp_uri', '')
     email = session.get('email', '')
     
-    form = VerifyTOTPForm()  # Create an instance of the form
+    form = VerifyTOTPForm()
     
-    if form.validate_on_submit():  # Check if the form is submitted and valid
+    if form.validate_on_submit():
         totp_code = form.totp_code.data
         user = User.query.filter_by(email=email).first()
         if user.verify_totp(totp_code):
@@ -141,46 +140,6 @@ def totp_setup():
             flash('Invalid verification code. Please try again.', 'danger')
 
     return render_template('totp_setup.html', totp_uri=totp_uri, form=form)
-
-# def check_client(func):
-#     @wraps(func)
-#     def wrapper(*args, **kwargs):
-
-#         client_ip = request.remote_addr
-
-#         client = Client.query.filter_by(ip=client_ip).first()
-
-#         if client:
-#             if client.is_suspended and datetime.utcnow() >= client.timeout_date:
-#                 client.is_suspended = False
-#             else:
-#                 flash('Account suspended for too many requests', 'danger')
-#                 return redirect(url_for('routes.home'))
-
-#             time_difference = datetime.utcnow() - client.requests[-1].request_date if client.requests else timedelta(seconds=1)
-#             if time_difference.total_seconds() < 1:
-#                 time.sleep(1)
-
-#             recent_requests = Client.query.filter(
-#                 Client.ip == client_ip,
-#                 Client.requests.any(Request.request_date >= (datetime.utcnow() - timedelta(minutes=10)))
-#             ).count()
-            
-#             if recent_requests >= 100:
-#                 client.is_suspended = True
-#                 client.timeout_date = datetime.utcnow() + timedelta(hours=1)
-#                 db.session.commit()
-#                 flash('Account suspended for too many requests', 'danger')
-#                 return redirect(url_for('routes.home'))
-
-#         if client:
-#             request_entry = Request(client_id=client.id)
-#             db.session.add(request_entry)
-#             db.session.commit()
-
-#         return func(*args, **kwargs)
-
-#     return wrapper
 
 @routes.route('/login', methods=['GET', 'POST'])
 @check_client
@@ -198,6 +157,7 @@ def login():
     return render_template('login.html', title='Login', form=form)
 
 @routes.route('/change_password', methods=['GET', 'POST'])
+@check_client
 def change_password():
     form = ChangePassword()
 
